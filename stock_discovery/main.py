@@ -19,28 +19,16 @@ import argparse
 import sys
 import warnings
 
-import yfinance as yf
 import pandas as pd
 from tabulate import tabulate
 
 from config import KOREAN_STOCKS, US_STOCKS, DEFAULT_PERIOD
+from data_fetcher import fetch_stock_data
 from indicators import calc_all_indicators
 from screener import run_screening, BUY_STRATEGIES, SELL_STRATEGIES
 from analyzer import calc_score, generate_summary
 
 warnings.filterwarnings("ignore")
-
-
-def fetch_stock_data(ticker: str, period: str = DEFAULT_PERIOD) -> pd.DataFrame | None:
-    """Yahoo Finance에서 주가 데이터를 가져옵니다."""
-    try:
-        stock = yf.Ticker(ticker)
-        df = stock.history(period=period)
-        if df.empty or len(df) < 30:
-            return None
-        return df
-    except Exception:
-        return None
 
 
 def analyze_single_stock(ticker: str, name: str, period: str) -> dict | None:
