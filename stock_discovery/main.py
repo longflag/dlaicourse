@@ -174,7 +174,17 @@ def print_detail(ticker: str, name: str, period: str):
     # === 뉴스 감성 ===
     print(f"\n  --- 뉴스 감성 (점수: {sent_eval['score']}/100, {sent_eval['label']}) ---")
     print(f"  감성 점수: {sentiment['sentiment_score']:+.3f}")
+    cred = sentiment.get('credibility', 0.7)
+    cred_label = "높음" if cred >= 0.7 else ("보통" if cred >= 0.4 else "낮음")
+    print(f"  뉴스 신뢰도: {cred:.0%} ({cred_label})")
     print(f"  뉴스 건수: {sentiment['headline_count']}건")
+    overheating = sentiment.get("overheating", {})
+    if overheating.get("is_overheated"):
+        contrarian = overheating.get("contrarian_signal", "")
+        reason = overheating.get("reason", "")
+        signal = "역발상 매수 고려" if contrarian == "buy" else "차익실현 고려"
+        print(f"  *** 과열 감지: {reason}")
+        print(f"  *** 역발상 신호: {signal}")
     if sentiment.get("top_headlines"):
         print(f"  주요 헤드라인:")
         for h in sentiment["top_headlines"][:3]:
