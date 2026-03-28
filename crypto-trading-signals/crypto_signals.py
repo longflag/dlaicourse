@@ -39,14 +39,37 @@ PERIODS = {
 }
 
 
+def api_request_with_retry(url, params=None, max_retries=5):
+    """Rate limit 대응 재시도 로직이 포함된 API 요청"""
+    for attempt in range(max_retries):
+        try:
+            resp = requests.get(url, params=params, timeout=15)
+            if resp.status_code == 429:
+                wait = 2 ** attempt * 5  # 5, 10, 20, 40, 80초
+                console.print(f"  [yellow]API 제한 감지, {wait}초 대기 중... (시도 {attempt+1}/{max_retries})[/yellow]")
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            return resp.json()
+        except requests.RequestException as e:
+            if attempt < max_retries - 1:
+                wait = 2 ** attempt * 3
+                console.print(f"  [yellow]요청 실패, {wait}초 후 재시도... ({e})[/yellow]")
+                time.sleep(wait)
+            else:
+                console.print(f"  [red]요청 최종 실패: {e}[/red]")
+                return None
+    return None
+
+
 def fetch_market_data(coin_id, days):
     """CoinGecko에서 시장 데이터를 가져옵니다."""
     url = f"{COINGECKO_BASE}/coins/{coin_id}/market_chart"
     params = {"vs_currency": "usd", "days": days, "interval": "daily"}
+    data = api_request_with_retry(url, params)
+    if data is None:
+        return None
     try:
-        resp = requests.get(url, params=params, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
         df = pd.DataFrame(data["prices"], columns=["timestamp", "price"])
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         df.set_index("timestamp", inplace=True)
@@ -58,8 +81,8 @@ def fetch_market_data(coin_id, days):
             df = df.join(vol_df, how="left")
 
         return df
-    except requests.RequestException as e:
-        console.print(f"[red]데이터 조회 실패 ({coin_id}): {e}[/red]")
+    except (KeyError, ValueError) as e:
+        console.print(f"[red]데이터 파싱 실패 ({coin_id}): {e}[/red]")
         return None
 
 
@@ -74,24 +97,19 @@ def fetch_current_prices():
         "sparkline": "false",
         "price_change_percentage": "1h,24h,7d,30d",
     }
-    try:
-        resp = requests.get(url, params=params, timeout=15)
-        resp.raise_for_status()
-        return {item["id"]: item for item in resp.json()}
-    except requests.RequestException as e:
-        console.print(f"[red]현재 가격 조회 실패: {e}[/red]")
+    data = api_request_with_retry(url, params)
+    if data is None:
         return {}
+    return {item["id"]: item for item in data}
 
 
 def fetch_global_data():
     """글로벌 시장 데이터를 가져옵니다."""
     url = f"{COINGECKO_BASE}/global"
-    try:
-        resp = requests.get(url, timeout=15)
-        resp.raise_for_status()
-        return resp.json().get("data", {})
-    except requests.RequestException:
+    data = api_request_with_retry(url)
+    if data is None:
         return {}
+    return data.get("data", {})
 
 
 def fetch_fear_greed_index():
@@ -638,9 +656,9 @@ def main():
 
     # 1단계: 기본 데이터 조회
     current_data = fetch_current_prices()
-    time.sleep(1)  # API rate limit 대응
+    time.sleep(4)  # API rate limit 대응
     global_data = fetch_global_data()
-    time.sleep(1)
+    time.sleep(4)
     fng = fetch_fear_greed_index()
 
     if not current_data:
@@ -656,7 +674,7 @@ def main():
             if df is not None and len(df) > 0:
                 result = analyze_signals(df, period_config)
                 all_results[f"{coin_id}_{period_key}"] = result
-            time.sleep(1.2)  # rate limit
+            time.sleep(6)  # rate limit (CoinGecko 무료: ~10-30 req/min)
 
     # 3단계: 결과 출력
     display_market_overview(current_data, global_data, fng)
