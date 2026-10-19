@@ -1,0 +1,7 @@
+# 개인 보유/실행 기록 — 절대 커밋하지 않는다
+holdings.json
+rebalance_log.jsonl
+data_cache/
+.env
+__pycache__/
+*.pyc
